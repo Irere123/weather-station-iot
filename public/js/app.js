@@ -1,121 +1,251 @@
-// DOM Elements
-const temperatureElement = document.getElementById("temperature");
-const humidityElement = document.getElementById("humidity");
-const pressureElement = document.getElementById("pressure");
-const timestampElement = document.getElementById("timestamp");
+// Initialize chart with custom styling
 const ctx = document.getElementById("weatherChart").getContext("2d");
+Chart.defaults.color = "rgba(255, 255, 255, 0.7)";
+Chart.defaults.font.family = "'Poppins', sans-serif";
 
-// Store latest values
-let latestData = {
-  temperature: "--",
-  humidity: "--",
-  pressure: "--",
-  timestamp: new Date(),
-};
-
-// Initialize Chart
-const chart = new Chart(ctx, {
+const weatherChart = new Chart(ctx, {
   type: "line",
   data: {
     labels: [],
     datasets: [
       {
         label: "Temperature (°C)",
-        borderColor: "rgb(239, 68, 68)",
-        backgroundColor: "rgba(239, 68, 68, 0.1)",
+        borderColor: "#ff7e5f",
+        backgroundColor: "rgba(255, 126, 95, 0.2)",
+        borderWidth: 3,
+        pointBackgroundColor: "#ff7e5f",
+        pointBorderColor: "rgba(255, 255, 255, 0.8)",
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        tension: 0.4,
         data: [],
-        yAxisID: "temperature",
+        yAxisID: "y",
       },
       {
         label: "Humidity (%)",
-        borderColor: "rgb(59, 130, 246)",
-        backgroundColor: "rgba(59, 130, 246, 0.1)",
+        borderColor: "#00f2fe",
+        backgroundColor: "rgba(0, 242, 254, 0.2)",
+        borderWidth: 3,
+        pointBackgroundColor: "#00f2fe",
+        pointBorderColor: "rgba(255, 255, 255, 0.8)",
+        pointBorderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        tension: 0.4,
         data: [],
-        yAxisID: "humidity",
+        yAxisID: "y1",
       },
     ],
   },
   options: {
     responsive: true,
     maintainAspectRatio: false,
-    interaction: {
-      intersect: false,
-      mode: "index",
+    plugins: {
+      legend: {
+        position: "top",
+        labels: {
+          padding: 20,
+          usePointStyle: true,
+          pointStyle: "circle",
+          font: {
+            size: 12,
+          },
+        },
+      },
+      tooltip: {
+        backgroundColor: "rgba(0, 0, 0, 0.7)",
+        titleFont: {
+          size: 13,
+        },
+        bodyFont: {
+          size: 13,
+        },
+        padding: 10,
+        cornerRadius: 8,
+        displayColors: true,
+      },
     },
     scales: {
       x: {
-        type: "time",
-        time: {
-          unit: "minute",
-          displayFormats: {
-            minute: "HH:mm",
+        grid: {
+          color: "rgba(255, 255, 255, 0.1)",
+          borderColor: "rgba(255, 255, 255, 0.2)",
+        },
+        ticks: {
+          font: {
+            size: 11,
           },
         },
         title: {
           display: true,
           text: "Time",
+          font: {
+            size: 13,
+          },
         },
       },
-      temperature: {
+      y: {
         type: "linear",
+        display: true,
         position: "left",
         title: {
           display: true,
           text: "Temperature (°C)",
+          font: {
+            size: 13,
+          },
         },
+        grid: {
+          color: "rgba(255, 255, 255, 0.1)",
+          borderColor: "rgba(255, 255, 255, 0.2)",
+        },
+        min: 0,
+        max: 50,
       },
-      humidity: {
+      y1: {
         type: "linear",
+        display: true,
         position: "right",
         title: {
           display: true,
           text: "Humidity (%)",
+          font: {
+            size: 13,
+          },
+        },
+        min: 0,
+        max: 100,
+        grid: {
+          drawOnChartArea: false,
+          borderColor: "rgba(255, 255, 255, 0.2)",
         },
       },
     },
-    plugins: {
-      title: {
-        display: true,
-        text: "5-Minute Averages",
+    animations: {
+      tension: {
+        duration: 1000,
+        easing: "linear",
       },
     },
   },
 });
 
-// Function to format timestamp
-const formatTimestamp = (timestamp) => {
-  const date = new Date(timestamp);
-  return date.toLocaleString();
-};
+// Rolling window settings (e.g., show last 30 minutes of data)
+const MAX_DATA_POINTS = 180; // Approx 30 minutes if data comes every 10 seconds
+let temperatureData = [];
+let humidityData = [];
+let labels = [];
 
-// Function to update the UI with new weather data
-const updateUI = () => {
-  temperatureElement.textContent = latestData.temperature;
-  humidityElement.textContent = latestData.humidity;
-  pressureElement.textContent = latestData.pressure;
-  timestampElement.textContent = formatTimestamp(latestData.timestamp);
-};
+// Function to update chart in real-time
+function updateChartRealTime(timestamp, temperature, humidity) {
+  const timeLabel = new Date(timestamp).toLocaleTimeString();
 
-// Function to update the chart with new averages
-const updateChart = async () => {
-  try {
-    const response = await fetch("/api/averages");
-    if (!response.ok) {
-      throw new Error("Failed to fetch averages");
-    }
-    const data = await response.json();
+  // Add new data
+  labels.push(timeLabel);
+  temperatureData.push(temperature);
+  humidityData.push(humidity);
 
-    // Update chart data
-    chart.data.labels = data.map((d) => new Date(d.timestamp));
-    chart.data.datasets[0].data = data.map((d) => d.avg_temperature);
-    chart.data.datasets[1].data = data.map((d) => d.avg_humidity);
-    chart.update();
-  } catch (error) {
-    console.error("Error updating chart:", error);
+  // Remove old data if exceeding max points
+  if (labels.length > MAX_DATA_POINTS) {
+    labels.shift();
+    temperatureData.shift();
+    humidityData.shift();
   }
-};
 
-// Connect to MQTT Broker
+  // Update chart data
+  weatherChart.data.labels = labels;
+  weatherChart.data.datasets[0].data = temperatureData;
+  weatherChart.data.datasets[1].data = humidityData;
+
+  // Update last update time
+  document.getElementById("last-update").innerText = timeLabel;
+
+  // Smooth chart update
+  weatherChart.update("none"); // 'none' for no animation on every update
+}
+
+// Function to fetch current readings
+async function fetchCurrentReadings() {
+  try {
+    const response = await axios.get("/api/weather/current");
+    const data = response.data;
+    if (data) {
+      if (data.temperature !== null) {
+        document.getElementById("temp").innerText = data.temperature.toFixed(1);
+      }
+      if (data.humidity !== null) {
+        document.getElementById("humidity").innerText =
+          data.humidity.toFixed(1);
+      }
+    }
+  } catch (error) {
+    console.error("Error fetching current readings:", error);
+  }
+}
+
+// Function to update historical averages
+async function updateHistoricalAverages() {
+  try {
+    const response = await axios.get("/api/weather/history");
+    const data = response.data;
+
+    if (data && data.length > 0) {
+      // Process temperature data
+      const tempData = data.filter((reading) => reading.type === "temperature");
+      const tempValues = tempData.map((reading) => reading.value);
+      const tempAvg = tempValues.reduce((a, b) => a + b, 0) / tempValues.length;
+
+      // Process humidity data
+      const humidityData = data.filter(
+        (reading) => reading.type === "humidity"
+      );
+      const humidityValues = humidityData.map((reading) => reading.value);
+      const humidityAvg =
+        humidityValues.reduce((a, b) => a + b, 0) / humidityValues.length;
+
+      // Update averages display
+      if (!isNaN(tempAvg)) {
+        document.getElementById("temp-avg").innerText = tempAvg.toFixed(1);
+      }
+      if (!isNaN(humidityAvg)) {
+        document.getElementById("humidity-avg").innerText =
+          humidityAvg.toFixed(1);
+      }
+
+      // Update chart
+      updateChart(data);
+    }
+  } catch (error) {
+    console.error("Error fetching historical data:", error);
+  }
+}
+
+// Function to update the chart with new data
+function updateChart(data) {
+  const tempData = data
+    .filter((reading) => reading.type === "temperature")
+    .map((reading) => ({
+      x: new Date(reading.timestamp),
+      y: reading.value,
+    }));
+
+  const humidityData = data
+    .filter((reading) => reading.type === "humidity")
+    .map((reading) => ({
+      x: new Date(reading.timestamp),
+      y: reading.value,
+    }));
+
+  weatherChart.data.labels = tempData.map((reading) =>
+    reading.x.toLocaleTimeString()
+  );
+  weatherChart.data.datasets[0].data = tempData;
+  weatherChart.data.datasets[1].data = humidityData;
+  weatherChart.update();
+}
+
+// Connect to the MQTT Broker over WebSockets
 const mqttClient = mqtt.connect("ws://157.173.101.159:9001");
 
 mqttClient.on("connect", () => {
@@ -125,26 +255,41 @@ mqttClient.on("connect", () => {
 });
 
 mqttClient.on("message", (topic, message) => {
-  const value = message.toString();
-  const timestamp = new Date();
-  console.log(`Received: ${topic} → ${value}`);
+  console.log(`Received: ${topic} → ${message.toString()}`);
+  const value = parseFloat(message.toString());
+  const timestamp = new Date().toISOString();
 
   if (topic === "/work_group_01/room_temp/temperature") {
-    latestData.temperature = parseFloat(value).toFixed(1);
-    latestData.timestamp = timestamp;
+    const tempElement = document.getElementById("temp");
+    const currentTemp = parseFloat(tempElement.innerText) || 0;
+    tempElement.innerText = value.toFixed(1);
+
+    // Store temperature reading
+    axios
+      .post("/api/weather/history", {
+        type: "temperature",
+        value: value,
+        timestamp: timestamp,
+      })
+      .catch((error) => console.error("Error storing temperature:", error));
   } else if (topic === "/work_group_01/room_temp/humidity") {
-    latestData.humidity = parseFloat(value).toFixed(1);
-    latestData.timestamp = timestamp;
+    const humidityElement = document.getElementById("humidity");
+    const currentHumidity = parseFloat(humidityElement.innerText) || 0;
+    humidityElement.innerText = value.toFixed(1);
+
+    // Store humidity reading
+    axios
+      .post("/api/weather/history", {
+        type: "humidity",
+        value: value,
+        timestamp: timestamp,
+      })
+      .catch((error) => console.error("Error storing humidity:", error));
   }
-
-  updateUI();
 });
 
-mqttClient.on("error", (error) => {
-  console.error("MQTT Error:", error);
-});
-
-// Initial UI update and start periodic chart updates
-updateUI();
-updateChart();
-setInterval(updateChart, 60 * 1000); // Update chart every minute
+// Initial fetch and setup intervals
+fetchCurrentReadings();
+updateHistoricalAverages();
+setInterval(fetchCurrentReadings, 30000); // Update every 30 seconds
+setInterval(updateHistoricalAverages, 60000); // Update every minute
